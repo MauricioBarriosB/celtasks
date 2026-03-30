@@ -4,7 +4,7 @@
 
 import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 
-const API_URL = "https://capacitaenlinea.cl/celtasksapi/api";
+const API_URL = import.meta.env.VITE_APP_API_URL;
 
 export const API_ERROR_CODES = {
     AUTH_MISSING: "AUTH_MISSING",
