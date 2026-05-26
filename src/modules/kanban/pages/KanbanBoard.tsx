@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import TaskCard from "@/modules/kanban/components/TaskCard";
-import { Button, Chip, Spinner, useDisclosure, addToast } from "@heroui/react";
-import { Plus, ArrowLeft, Filter, User } from "lucide-react";
+import { Button, Chip, Spinner, Tooltip, useDisclosure, addToast } from "@heroui/react";
+import { Plus, ArrowLeft, Filter, User, ArrowDownNarrowWide, ArrowUpNarrowWide, ArrowUpDown } from "lucide-react";
 import { useAuthContext } from "@modules/user/context/AuthContext";
 import { fetchProject, fetchProjectTasks, fetchProjectUsers, reorderTasks } from "@services/apiCrud";
 import type { Task, TaskStatus, Project, ProjectStatus, User as UserType, TaskReorderItem } from "@/types";
@@ -39,6 +39,47 @@ export default function KanbanBoard() {
         });
     }
 
+    type SortOrder = "newest" | "oldest" | "manual";
+    const SORT_CYCLE: Record<SortOrder, SortOrder> = {
+        newest: "oldest",
+        oldest: "manual",
+        manual: "newest",
+    };
+    const SORT_LABEL: Record<SortOrder, string> = {
+        newest: "Newest first",
+        oldest: "Oldest first",
+        manual: "Manual order",
+    };
+    const sortKey = `celtasks_sort_orders_${projectId}`;
+    const [sortOrders, setSortOrders] = useState<Record<string, SortOrder>>(() => {
+        try {
+            const raw = localStorage.getItem(sortKey);
+            return raw ? (JSON.parse(raw) as Record<string, SortOrder>) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    function getSortOrder(status: TaskStatus): SortOrder {
+        return sortOrders[status] ?? "newest";
+    }
+
+    function toggleSortOrder(status: TaskStatus) {
+        setSortOrders((prev) => {
+            const current = prev[status] ?? "newest";
+            const next: SortOrder = SORT_CYCLE[current];
+            const updated = { ...prev, [status]: next };
+            localStorage.setItem(sortKey, JSON.stringify(updated));
+            return updated;
+        });
+    }
+
+    function renderSortIcon(order: SortOrder) {
+        if (order === "newest") return <ArrowDownNarrowWide className="w-4 h-4" />;
+        if (order === "oldest") return <ArrowUpNarrowWide className="w-4 h-4" />;
+        return <ArrowUpDown className="w-4 h-4" />;
+    }
+
     const loadData = useCallback(async () => {
         if (!projectId) return;
         try {
@@ -66,10 +107,16 @@ export default function KanbanBoard() {
     }, [loadData]);
 
     function getColumnTasks(status: TaskStatus): Task[] {
+        const order = getSortOrder(status);
         return tasks
             .filter((t) => t.status === status)
             .filter((t) => !showOnlyMine || t.assignees.some((a) => a.id === user?.id))
-            .sort((a, b) => a.position - b.position);
+            .sort((a, b) => {
+                if (order === "manual") return a.position - b.position;
+                const aTime = new Date(a.createdAt).getTime();
+                const bTime = new Date(b.createdAt).getTime();
+                return order === "newest" ? bTime - aTime : aTime - bTime;
+            });
     }
 
     function handleDragStart(e: React.DragEvent, task: Task) {
@@ -281,6 +328,17 @@ export default function KanbanBoard() {
                                             {colTasks.length}
                                         </Chip>
                                     </div>
+                                    <Tooltip content={SORT_LABEL[getSortOrder(col.key)]} placement="top">
+                                        <Button
+                                            isIconOnly
+                                            size="sm"
+                                            variant="light"
+                                            aria-label="Toggle task sort order"
+                                            onPress={() => toggleSortOrder(col.key)}
+                                        >
+                                            {renderSortIcon(getSortOrder(col.key))}
+                                        </Button>
+                                    </Tooltip>
                                 </div>
 
                                 {/* Task list */}
